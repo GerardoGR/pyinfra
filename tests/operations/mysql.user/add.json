@@ -8,6 +8,5 @@
     },
     "commands": [
         "mysql -Be 'CREATE USER \"someuser\"@\"localwhat\"'"
-    ],
-    "idempotent": false
+    ]
 }

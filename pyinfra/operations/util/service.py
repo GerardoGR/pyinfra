@@ -1,26 +1,18 @@
 def handle_service_control(
     host,
-    name, fact_cls, formatter, running, restarted, reloaded, command,
+    name, statuses, formatter, running, restarted, reloaded, command,
     status_argument='status',
 ):
-    statuses = host.get_fact(fact_cls)
     status = statuses.get(name, None)
 
     # If we don't know the status, we need to check if it's up before starting
     # and/or restarting/reloading
     if status is None:
-        yield '''
-            # If the service is running
-            if {status_command}; then
-                {stop_command}
-                {restart_command}
-                {reload_command}
-
-            # If the service is not running, we just start it (no re[start|load])
-            else
-                {start_command}
-            fi
-        '''.format(
+        yield (
+            'if ({status_command}); then '
+            '({stop_command}); ({restart_command}); ({reload_command}); '
+            'else ({start_command}); fi'
+        ).format(
             status_command=formatter.format(name, status_argument),
             start_command=(
                 formatter.format(name, 'start')

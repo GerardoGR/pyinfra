@@ -158,11 +158,12 @@ class MysqlUsers(MysqlFactBase):
 
 
 MYSQL_GRANT_REGEX = (
-    r"^GRANT ([A-Z,\s]+) ON (\*|`[a-z_\\]+`\.\*|'[a-z_]+') "
+    r"^GRANT ([A-Z,\s]+) ON ((?:\*|`[a-z_\\]+`)(?:\.\*|'[a-z_]+')) "
     r'TO `[A-Z0-9a-z_\-]+`@`[A-Z0-9a-z_\.\-]+`(.*)'
 )
 
 
+# TODO: remove the dictionary and just have GRANT OPTION as a listed privilege
 class MysqlUserGrants(MysqlFactBase):
     '''
     Returns a dict of ``<database>`.<table>`` with granted privileges for each:
@@ -221,5 +222,6 @@ class MysqlUserGrants(MysqlFactBase):
 
             if 'WITH GRANT OPTION' in extras:
                 database_table_privileges[database_table]['with_grant_option'] = True
+                database_table_privileges[database_table]['privileges'].add('GRANT OPTION')
 
         return database_table_privileges

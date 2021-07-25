@@ -2,6 +2,8 @@ import shlex
 
 from string import Formatter
 
+import six
+
 from six.moves import shlex_quote
 
 from .operation_kwargs import get_executor_kwarg_keys
@@ -71,7 +73,7 @@ class StringCommand(PyinfraCommand):
     def __init__(self, *bits, **kwargs):
         super(StringCommand, self).__init__(**kwargs)
         self.bits = bits
-        self.separator = kwargs.pop('separator', ' ')
+        self.separator = kwargs.pop('_separator', ' ')
 
     def __str__(self):
         return self.get_masked_value()
@@ -90,6 +92,9 @@ class StringCommand(PyinfraCommand):
 
             if isinstance(bit, StringCommand):
                 bit = bit_accessor(bit)
+
+            if not isinstance(bit, six.string_types):
+                bit = '{0}'.format(bit)
 
             if quote:
                 bit = shlex_quote(bit)

@@ -14,7 +14,20 @@ import six
 from six.moves import filterfalse, shlex_quote
 
 from pyinfra.api import FunctionCommand, operation, OperationError, StringCommand
+from pyinfra.api.connectors.util import remove_any_sudo_askpass_file
 from pyinfra.api.util import try_int
+from pyinfra.facts.files import Directory
+from pyinfra.facts.server import (
+    Crontab,
+    Groups,
+    Hostname,
+    KernelModules,
+    Mounts,
+    Os,
+    Sysctl,
+    Users,
+    Which,
+)
 
 from . import (
     apk,
@@ -23,6 +36,7 @@ from . import (
     bsdinit,
     dnf,
     files,
+    openrc,
     pacman,
     pkg,
     systemd,
@@ -54,6 +68,10 @@ def reboot(delay=10, interval=1, reboot_timeout=300, state=None, host=None):
             reboot_timeout=600,
         )
     '''
+
+    # Remove this now, before we reboot the server - if the reboot fails (expected or not)
+    # we'll error if we don't clean this up now. Will simply be re-uploaded if needed later.
+    remove_any_sudo_askpass_file(host)
 
     yield StringCommand('reboot', success_exit_codes=[0, -1])  # -1 being error/disconnected
 
@@ -217,7 +235,7 @@ def modprobe(module, present=True, force=False, state=None, host=None):
         t1, t2 = tee(iterable)
         return list(filter(predicate, t2)), list(filterfalse(predicate, t1))
 
-    modules = host.fact.kernel_modules
+    modules = host.get_fact(KernelModules)
     present_mods, missing_mods = partition(lambda mod: mod in modules, list_value)
 
     args = ''
@@ -268,7 +286,7 @@ def mount(
     options = options or []
     options_string = ','.join(options)
 
-    mounts = host.fact.mounts
+    mounts = host.get_fact(Mounts)
     is_mounted = path in mounts
 
     # Want mount but don't have?
@@ -323,9 +341,9 @@ def hostname(hostname, hostname_file=None, state=None, host=None):
         )
     '''
 
-    current_hostname = host.fact.hostname
+    current_hostname = host.get_fact(Hostname)
 
-    if host.fact.which('hostnamectl'):
+    if host.get_fact(Which, command='hostnamectl'):
         if current_hostname != hostname:
             yield 'hostnamectl set-hostname {0}'.format(hostname)
         else:
@@ -333,7 +351,7 @@ def hostname(hostname, hostname_file=None, state=None, host=None):
         return
 
     if hostname_file is None:
-        os = host.fact.os
+        os = host.get_fact(Os)
 
         if os == 'Linux':
             hostname_file = '/etc/hostname'
@@ -395,10 +413,12 @@ def sysctl(
         else try_int(value)
     )
 
-    existing_value = host.fact.sysctl.get(key)
+    existing_sysctls = host.get_fact(Sysctl)
+
+    existing_value = existing_sysctls.get(key)
     if not existing_value or existing_value != value:
         yield "sysctl {0}='{1}'".format(key, string_value)
-        host.fact.sysctl[key] = value
+        existing_sysctls[key] = value
     else:
         host.noop('sysctl {0} is set to {1}'.format(key, string_value))
 
@@ -441,16 +461,19 @@ def service(
         )
     '''
 
-    if host.fact.which('systemctl'):
+    if host.get_fact(Which, command='systemctl'):
         service_operation = systemd.service
 
-    elif host.fact.which('initctl'):
+    elif host.get_fact(Which, command='rc-service'):
+        service_operation = openrc.service
+
+    elif host.get_fact(Which, command='initctl'):
         service_operation = upstart.service
 
-    elif host.fact.directory('/etc/init.d'):
+    elif host.get_fact(Directory, path='/etc/init.d'):
         service_operation = sysvinit.service
 
-    elif host.fact.directory('/etc/rc.d'):
+    elif host.get_fact(Directory, path='/etc/rc.d'):
         service_operation = bsdinit.service
 
     else:
@@ -489,31 +512,31 @@ def packages(
         )
     '''
 
-    if host.fact.which('apk'):
+    if host.get_fact(Which, command='apk'):
         package_operation = apk.packages
 
-    elif host.fact.which('apt'):
+    elif host.get_fact(Which, command='apt'):
         package_operation = apt.packages
 
-    elif host.fact.which('brew'):
+    elif host.get_fact(Which, command='brew'):
         package_operation = brew.packages
 
-    elif host.fact.which('dnf'):
+    elif host.get_fact(Which, command='dnf'):
         package_operation = dnf.packages
 
-    elif host.fact.which('pacman'):
+    elif host.get_fact(Which, command='pacman'):
         package_operation = pacman.packages
 
-    elif host.fact.which('xbps'):
+    elif host.get_fact(Which, command='xbps'):
         package_operation = xbps.packages
 
-    elif host.fact.which('yum'):
+    elif host.get_fact(Which, command='yum'):
         package_operation = yum.packages
 
-    elif host.fact.which('zypper'):
+    elif host.get_fact(Which, command='zypper'):
         package_operation = zypper.packages
 
-    elif host.fact.which('pkg') or host.fact.which('pkg_add'):
+    elif host.get_fact(Which, command='pkg') or host.get_fact(Which, command='pkg_add'):
         package_operation = pkg.packages
 
     else:
@@ -590,7 +613,7 @@ def crontab(
     day_of_week = comma_sep(day_of_week)
     day_of_month = comma_sep(day_of_month)
 
-    crontab = host.fact.crontab(user)
+    crontab = host.get_fact(Crontab, user=user)
     name_comment = '# pyinfra-name={0}'.format(cron_name)
 
     existing_crontab = crontab.get(command)
@@ -724,7 +747,7 @@ def group(group, present=True, system=False, gid=None, state=None, host=None):
             )
     '''
 
-    groups = host.fact.groups
+    groups = host.get_fact(Groups)
     is_present = group in groups
 
     # Group exists but we don't want them?
@@ -737,7 +760,7 @@ def group(group, present=True, system=False, gid=None, state=None, host=None):
         args = []
 
         # BSD doesn't do system users
-        if system and 'BSD' not in host.fact.os:
+        if system and 'BSD' not in host.get_fact(Os):
             args.append('-r')
 
         args.append(group)
@@ -813,7 +836,7 @@ def user(
             )
     '''
 
-    users = host.fact.users
+    users = host.get_fact(Users)
     existing_user = users.get(user)
 
     if groups is None:
@@ -846,7 +869,7 @@ def user(
         if groups:
             args.append('-G {0}'.format(','.join(groups)))
 
-        if system and 'BSD' not in host.fact.os:
+        if system and 'BSD' not in host.get_fact(Os):
             args.append('-r')
 
         if uid:
@@ -871,8 +894,6 @@ def user(
             'group': group,
             'groups': groups,
         }
-        # Flag this username as "to be added" in the state
-        state.add_will_add_user(user)
 
     # User exists and we want them, check home/shell/keys
     else:

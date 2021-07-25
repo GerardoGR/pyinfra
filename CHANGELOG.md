@@ -1,3 +1,27 @@
+# v1.4.9
+
++ Fix connection w/`use_remote_sudo` in `ssh.upload` operation (@GerardoGR)
++ Fix `mysql.MysqlUserGrants` fact regex for `*.*` grant lines
++ Remove any askpass file before issuing reboots in `server.reboot` operation
+
+# v1.4.8
+
++ Remove broken "will add user" detection in facts, just pass if user is missing
++ Quite non-string elements in `StringCommand` before passing to `shlex.quote`
++ Ignore `use_sudo_password` in the `@docker` connector
++ Loosen `jinja2` requirement to allow v3 (compatible)
+
+# v1.4.7
+
++ Fix for passing `Path` objects as arguments to `files.*` operations & facts
++ Futher improvements to the updated facts docs
+
+# v1.4.6
+
++ Properly handle shell quoting of filenames in all `files.*` facts
++ Update `files.*` operations to use explicit fact imports
++ Update the docs to show explicit fact import style
+
 # v1.4.5
 
 + Fix missing mysql connection arguments updating privileges `mysql.database` operation (@sfermigier)

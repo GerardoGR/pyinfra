@@ -1,15 +1,8 @@
 from __future__ import unicode_literals
 
-import re
-
 from getpass import getpass
 from socket import timeout as timeout_error
 from subprocess import PIPE, Popen
-
-try:
-    from pathlib import PurePath
-except ImportError:
-    PurePath = None
 
 import click
 import gevent
@@ -22,8 +15,6 @@ from pyinfra import logger
 from pyinfra.api import Config, MaskString, QuoteString, StringCommand
 from pyinfra.api.util import memoize
 
-UNIX_PATH_SPACE_REGEX = re.compile(r'([^\\]) ')
-
 SUDO_ASKPASS_ENV_VAR = 'PYINFRA_SUDO_PASSWORD'
 SUDO_ASKPASS_EXE_FILENAME = 'pyinfra-sudo-askpass'
 
@@ -32,17 +23,6 @@ def get_sudo_askpass_exe():
     return six.StringIO('''#!/bin/sh
 echo ${0}
 '''.format(SUDO_ASKPASS_ENV_VAR))
-
-
-def escape_unix_path(path):
-    '''
-    Escape unescaped spaces in a (unix) path.
-    '''
-
-    if PurePath and isinstance(path, PurePath):
-        path = str(path)
-
-    return UNIX_PATH_SPACE_REGEX.sub(r'\1\\ ', path)
 
 
 def read_buffer(type_, io, output_queue, print_output=False, print_func=None):
@@ -69,6 +49,21 @@ def read_buffer(type_, io, output_queue, print_output=False, print_func=None):
 
         if print_output:
             _print(line)
+
+
+def execute_command_with_sudo_retry(host, command_kwargs, execute_command):
+    return_code, combined_output = execute_command()
+
+    if return_code != 0 and combined_output:
+        last_line = combined_output[-1][1]
+        if last_line == 'sudo: a password is required':
+            command_kwargs['use_sudo_password'] = get_sudo_password(
+                host,
+                use_sudo_password=True,  # ask for the password
+            )
+            return_code, combined_output = execute_command()
+
+    return return_code, combined_output
 
 
 def run_local_process(
@@ -171,11 +166,11 @@ def write_stdin(stdin, buffer):
     buffer.close()
 
 
-def get_sudo_password(state, host, use_sudo_password, run_shell_command, put_file):
+def get_sudo_password(host, use_sudo_password):
     sudo_askpass_uploaded = host.connector_data.get('sudo_askpass_uploaded', False)
     if not sudo_askpass_uploaded:
-        put_file(state, host, get_sudo_askpass_exe(), SUDO_ASKPASS_EXE_FILENAME)
-        run_shell_command(state, host, 'chmod +x {0}'.format(SUDO_ASKPASS_EXE_FILENAME))
+        host.put_file(get_sudo_askpass_exe(), SUDO_ASKPASS_EXE_FILENAME)
+        host.run_shell_command('chmod +x {0}'.format(SUDO_ASKPASS_EXE_FILENAME))
         host.connector_data['sudo_askpass_uploaded'] = True
 
     if use_sudo_password is True:
@@ -231,6 +226,9 @@ def make_unix_command(
     use_sudo_login=Config.USE_SUDO_LOGIN,
     use_sudo_password=Config.USE_SUDO_PASSWORD,
     preserve_sudo_env=Config.PRESERVE_SUDO_ENV,
+    # Doas config
+    doas=Config.DOAS,
+    doas_user=Config.DOAS_USER,
     # Optional state object, used to decide if we print invalid auth arg warnings
     state=None,
 ):
@@ -258,6 +256,18 @@ def make_unix_command(
     command = QuoteString(command)
 
     command_bits = []
+
+    if doas:
+        command_bits.extend(['doas', '-n'])
+
+        if doas_user:
+            command_bits.extend(['-u', doas_user])
+    elif state is None or not state.config.DOAS:
+        _warn_invalid_auth_args(
+            locals(),
+            'doas',
+            ('doas_user'),
+        )
 
     if use_sudo_password:
         askpass_filename, sudo_password = use_sudo_password

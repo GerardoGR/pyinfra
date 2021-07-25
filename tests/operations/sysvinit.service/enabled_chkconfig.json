@@ -1,0 +1,21 @@
+{
+    "args": ["nginx"],
+    "kwargs": {
+        "enabled": true
+    },
+    "facts": {
+        "sysvinit.InitdStatus": {
+            "nginx": true
+        },
+        "find_links": {
+            "/etc/rc*.d/S*nginx": []
+        },
+        "linux_distribution": {
+            "name": "CentOS"
+        }
+    },
+    "commands": [
+        "chkconfig nginx --add",
+        "chkconfig nginx on"
+    ]
+}

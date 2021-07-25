@@ -1,0 +1,19 @@
+{
+    "args": ["nginx.service"],
+    "facts": {
+        "systemd.SystemdStatus": {
+            "nginx.service": false
+        },
+        "server.Which": {
+            "command=systemctl": true,
+            "command=initctl": false
+        },
+        "files.Directory": {
+            "path=/etc/init.d": false,
+            "path=/etc/rc.d": false
+        }
+    },
+    "commands": [
+        "systemctl start nginx.service"
+    ]
+}

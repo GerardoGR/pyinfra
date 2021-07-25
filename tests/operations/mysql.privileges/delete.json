@@ -1,5 +1,5 @@
 {
-    "args": ["someuser", ["SELECT", "INSERT"]],
+    "args": ["someuser", ["SELECT", "INSERT", "DELETE"]],
     "kwargs": {
         "present": false
     },

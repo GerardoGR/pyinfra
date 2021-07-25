@@ -1,0 +1,19 @@
+{
+    "args": ["nginx"],
+    "facts": {
+        "sysvinit.InitdStatus": {
+            "nginx": false
+        },
+        "server.Which": {
+            "command=systemctl": false,
+            "command=initctl": false
+        },
+        "files.Directory": {
+            "path=/etc/init.d": true,
+            "path=/etc/rc.d": false
+        }
+    },
+    "commands": [
+        "/etc/init.d/nginx start"
+    ]
+}

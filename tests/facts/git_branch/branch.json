@@ -1,8 +1,0 @@
-{
-    "arg": "myrepo",
-    "command": "! test -d myrepo || (cd myrepo && git rev-parse --abbrev-ref HEAD)",
-    "output": [
-        "develop"
-    ],
-    "fact": "develop"
-}
